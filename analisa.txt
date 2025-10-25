@@ -1,0 +1,68 @@
+Analisa dan Komparasi: Server Multithread vs Singlethread
+=======================================================
+
+Ringkasan implementasi
+- server-multithread.py: server menerima koneksi dan membuat thread baru untuk setiap koneksi (I/O-bound simulation dengan delay configurable, default 1s). Port default 5000.
+- client-multithread.py: client membuat 10 thread yang melakukan koneksi/permintaan secara bersamaan ke server-multithread.
+- server-singlethread.py: server menerima koneksi dan memprosesnya secara sekuensial (tanpa thread terpisah). Port default 5001.
+- client-singlethread.py: client membuat 10 thread yang melakukan koneksi bersamaan ke server-singlethread.
+- Semua komunikasi sederhana: client mengirim "request-i", server menunggu delay lalu merespon lalu menutup koneksi.
+
+Eksperimen dasar (asumsi default delay=1s)
+- Multithread server: 10 client concurrent -> total waktu sekitar ~1s + overhead kecil (karena server memproses semuanya secara paralel di thread berbeda).
+- Singlethread server: 10 client concurrent -> total waktu sekitar ~10s + overhead (server memproses satu-per-satu).
+
+Aspek perbandingan
+1) Throughput
+   - Multithread: throughput lebih tinggi untuk pekerjaan I/O-bound karena server dapat memproses banyak request bersamaan.
+   - Singlethread: throughput rendah karena request diproses berurutan.
+
+2) Latency
+   - Multithread: latency per-request rendah (setara dengan processing_time plus sedikit overhead).
+   - Singlethread: latency untuk request pertama rendah, tetapi request yang datang belakangan akan mengalami latency bertambah (menunggu giliran).
+
+3) Resource usage (CPU & Memory)
+   - Multithread: menggunakan lebih banyak memori (stack untuk tiap thread) dan konteks thread overhead. Pada sistem dengan banyak thread, dapat muncul pressure memori.
+   - Singlethread: memori lebih hemat, CPU biasanya digunakan serially. Untuk I/O-bound, CPU tidak banyak digunakan sehingga singlethread punya cukup efisien memori.
+
+4) Skalabilitas
+   - Multithread: baik sampai batas tertentu. Pada Python CPython, Global Interpreter Lock (GIL) membatasi paralelisme CPU-bound — tetapi untuk I/O-bound (mis. network), thread masih efektif. Untuk sangat banyak koneksi, model async (asyncio) atau worker pool/process lebih efisien.
+   - Singlethread: tidak cocok untuk beban tinggi. Sering digunakan untuk aplikasi sederhana atau ketika urutan sangat penting.
+
+5) Kompleksitas & Keselamatan (Safety)
+   - Multithread: risiko race condition, butuh sinkronisasi jika berbagi state. Lebih banyak kompleksitas debugging (deadlock, race).
+   - Singlethread: lebih sederhana (no concurrent shared-state by default), lebih mudah reasoning.
+
+6) Fault tolerance dan isolasi
+   - Multithread: error di satu thread biasanya tidak mematikan thread lain selama exception ditangani. Namun kesalahan di thread utama bisa menghentikan server.
+   - Singlethread: satu exception yang tidak tertangani dapat mematikan server sehingga semua clients terpengaruh.
+
+7) Use-cases recommended
+   - Multithread: I/O-bound server (web server sederhana, network service dengan blocking operations).
+   - Singlethread: tugas sederhana, resource-constrained environment, atau ketika urutan dan determinisme sangat penting.
+
+Pengukuran praktis yang disarankan
+- Gunakan client yang mengukur waktu per permintaan (client yang disertakan sudah melakukan itu).
+- Untuk beban lebih besar / benchmark gunakan wrk, ab, atau siege.
+- Monitor resource (htop, top) untuk CPU/memory dan iostat / netstat untuk I/O.
+
+Catatan terkait Python (GIL)
+- Untuk operasi CPU-bound, multithreading di CPython tidak akan memberi percepatan maksimal karena GIL.
+- Untuk CPU-bound, gunakan multiprocessing (proses terpisah) atau implementasi Python tanpa GIL atau ekstensi C.
+
+Kesimpulan singkat
+- Untuk skenario network/I-O bound dengan banyak koneksi singkat, server multithread (atau async) umumnya jauh lebih baik karena menurunkan latensi dan meningkatkan throughput.
+- Server singlethread lebih sederhana dan hemat resource untuk beban rendah, tetapi tidak cocok untuk menangani banyak request simultan.
+
+Cara menjalankan (contoh)
+1) Jalankan server multithread:
+   python3 server-multithread.py --port 5000 --delay 1.0
+
+2) Di terminal lain jalankan client:
+   python3 client-multithread.py --port 5000 --n 10
+
+3) Untuk singlethread server:
+   python3 server-singlethread.py --port 5001 --delay 1.0
+   python3 client-singlethread.py --port 5001 --n 10
+
+End of analysis.
